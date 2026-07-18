@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyprland Animation Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <span class="logo-icon">✨</span>
+                <div class="logo-text">
+                    <h1>Hyprland Animation Studio</h1>
+                    <p>Customize and preview your window manager animations in real-time</p>
+                </div>
+            </div>
+            <div class="status-actions">
+                <span id="connection-status" class="status-badge connected" aria-live="polite">Connected to Daemon</span>
+                <button id="btn-revert" class="btn btn-secondary">Reset to Defaults</button>
+            </div>
+        </header>
+
+        <main class="app-body">
+            <!-- Sidebar: Presets -->
+            <section class="sidebar">
+                <div class="card-header">
+                    <h2>Animation Presets</h2>
+                    <span class="subtitle">Quickly apply standard curves</span>
+                </div>
+                <div class="preset-list" id="presets-container">
+                    <!-- Presets will be injected here by app.js -->
+                </div>
+
+                <div class="card-header" style="margin-top: 2rem;">
+                    <h2>Active Beziers</h2>
+                    <span class="subtitle">Curves used in configurations</span>
+                </div>
+                <div class="bezier-list" id="beziers-container">
+                    <!-- Beziers list injected here -->
+                </div>
+                <button id="btn-add-bezier" class="btn btn-secondary btn-sm" style="margin-top: 1rem; width: 100%;">+ Add Custom Bezier</button>
+            </section>
+
+            <!-- Main Content Area -->
+            <section class="main-content">
+                <div class="grid-two-cols">
+                    <!-- Editor & Controls -->
+                    <div class="left-panel">
+                        <!-- Bezier Editor -->
+                        <div class="glass-card bezier-editor-card">
+                            <div class="card-header">
+                                <h3>Curve Designer</h3>
+                                <span class="subtitle">Adjust control points P1 & P2 to shape the animation easing</span>
+                            </div>
+                            <div class="bezier-designer-container">
+                                <div class="canvas-wrapper">
+                                    <canvas id="bezier-canvas" width="300" height="300" aria-label="Bezier curve editor. Drag either control point to adjust the selected curve."></canvas>
+                                </div>
+                                <div class="bezier-controls">
+                                    <div class="input-group-row">
+                                        <label for="bezier-name-input">Curve Name:</label>
+                                        <input type="text" id="bezier-name-input" class="form-input" value="customCurve">
+                                    </div>
+                                    <div class="points-outputs">
+                                        <div class="point-val">P1: (<span id="p1-x-label">0.25</span>, <span id="p1-y-label">1.00</span>)</div>
+                                        <div class="point-val">P2: (<span id="p2-x-label">0.50</span>, <span id="p2-y-label">1.00</span>)</div>
+                                    </div>
+                                    <div class="raw-bezier-formula">
+                                        <code>bezier = <span id="bezier-formula-name">customCurve</span>, <span id="bezier-formula-coords">0.25, 1, 0.5, 1</span></code>
+                                    </div>
+                                    <div class="action-row">
+                                        <button id="btn-save-curve" class="btn btn-primary btn-sm">Update Curve Coordinate</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rule Configurator -->
+                        <div class="glass-card rules-card">
+                            <div class="card-header-with-actions">
+                                <div>
+                                    <h3>Animation Rules</h3>
+                                    <span class="subtitle">Set targets, curves, durations, and styles</span>
+                                </div>
+                                <div class="global-toggle">
+                                    <label class="switch">
+                                        <input type="checkbox" id="animations-enabled-checkbox" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span class="toggle-label">Animations Enabled</span>
+                                </div>
+                            </div>
+                            <div class="rules-table-container">
+                                <table class="rules-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Target (Window/Workspace)</th>
+                                            <th>Active</th>
+                                            <th>Duration (ds)</th>
+                                            <th>Curve</th>
+                                            <th>Style Modifier</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="rules-tbody">
+                                        <!-- Rules injected by app.js -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Layer Surface Configurator -->
+                        <div class="glass-card layer-rules-card">
+                            <div class="card-header">
+                                <h3>Layer Surface Animations</h3>
+                                <span class="subtitle">Animate menus, bars, and notifications (overrides system defaults)</span>
+                            </div>
+                            <div class="layer-rules-container">
+                                <table class="rules-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Layer Component</th>
+                                            <th>Animations Active</th>
+                                            <th>Transition Style</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="layer-rules-tbody">
+                                        <!-- Layer rules injected by app.js -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Interactive Sandbox & Output -->
+                    <div class="right-panel">
+                        <!-- Easing Simulator -->
+                        <div class="glass-card simulator-card">
+                            <div class="card-header">
+                                <h3>Interactive Sandbox</h3>
+                                <span class="subtitle">Preview changes before applying to Hyprland</span>
+                            </div>
+                            <div class="simulation-screen">
+                                <div class="desktop-mock">
+                                    <!-- Status Bar Mock -->
+                                    <div class="mock-statusbar">
+                                        <div class="left-indicators"><span>●</span><span>●</span><span>●</span></div>
+                                        <div class="center-time">10:42 AM</div>
+                                        <div class="right-battery">100% 🔋</div>
+                                    </div>
+                                    <!-- Workspace Simulation -->
+                                    <div class="workspace-viewport" id="workspace-viewport">
+                                        <div class="workspace-slide" id="workspace-container">
+                                            <!-- Workspace 1 -->
+                                            <div class="mock-workspace active" id="ws-1">
+                                                <div class="window-container">
+                                                    <div class="mock-window primary" id="win-1">
+                                                        <div class="win-header">
+                                                            <div class="win-controls"><span></span><span></span><span></span></div>
+                                                            <span class="win-title">Primary Window</span>
+                                                        </div>
+                                                        <div class="win-body">
+                                                            <div class="skeleton-text"></div>
+                                                            <div class="skeleton-text short"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mock-window secondary" id="win-2">
+                                                        <div class="win-header">
+                                                            <div class="win-controls"><span></span><span></span><span></span></div>
+                                                            <span class="win-title">Secondary Terminal</span>
+                                                        </div>
+                                                        <div class="win-body terminal-body">
+                                                            <code>$ neofetch</code>
+                                                            <code>OS: Omarchy Linux</code>
+                                                            <code>WM: Hyprland 0.55</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- Workspace 2 -->
+                                            <div class="mock-workspace" id="ws-2">
+                                                <div class="mock-window full">
+                                                    <div class="win-header">
+                                                        <div class="win-controls"><span></span><span></span><span></span></div>
+                                                        <span class="win-title">Web Browser</span>
+                                                    </div>
+                                                    <div class="win-body">
+                                                        <div class="skeleton-hero"></div>
+                                                        <div class="skeleton-text"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="simulator-actions">
+                                <button id="btn-sim-window" class="btn btn-secondary">Toggle Window In/Out</button>
+                                <button id="btn-sim-workspace" class="btn btn-secondary">Switch Workspace</button>
+                                <button id="btn-sim-border" class="btn btn-secondary">Flash Border Active</button>
+                            </div>
+                        </div>
+
+                        <!-- Config output code blocks -->
+                        <div class="glass-card config-output-card">
+                            <div class="card-header">
+                                <h3>Generated Configuration</h3>
+                                <span class="subtitle">This will be written to ~/.config/hypr/animations.conf</span>
+                            </div>
+                            <pre class="config-code-block"><code id="config-code-text"># Config preview...</code></pre>
+                            <div class="apply-actions">
+                                <button id="btn-apply-config" class="btn btn-apply-primary">Save & Apply Config</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast-hidden" role="status" aria-live="polite">
+        <span class="toast-icon">✨</span>
+        <span id="toast-message">Message here</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
