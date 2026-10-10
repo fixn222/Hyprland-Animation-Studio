@@ -158,11 +158,13 @@ const PRESETS = [
 
 // App State
 let state = {
+  format: 'lua',
   enabled: true,
   beziers: [],
   animations: [],
   layerRules: [],
-  selectedBezierIndex: 0
+  selectedBezierIndex: 0,
+  paths: {}
 };
 
 // Canvas Properties (300x300)
@@ -295,8 +297,20 @@ function drawBezierDesigner() {
   document.getElementById('p1-y-label').innerText = y1.toFixed(2);
   document.getElementById('p2-x-label').innerText = x2.toFixed(2);
   document.getElementById('p2-y-label').innerText = y2.toFixed(2);
-  document.getElementById('bezier-formula-name').innerText = activeBezier.name;
-  document.getElementById('bezier-formula-coords').innerText = `${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(2)}, ${y2.toFixed(2)}`;
+
+  const formulaBox = document.querySelector('.raw-bezier-formula code');
+  if (formulaBox) {
+    if (state.format === 'lua') {
+      formulaBox.innerHTML = `hl.curve("<span id="bezier-formula-name">${activeBezier.name}</span>", { type = "bezier", points = { { <span id="bezier-formula-coords">${x1.toFixed(2)}, ${y1.toFixed(2)}</span> }, { ${x2.toFixed(2)}, ${y2.toFixed(2)} } } })`;
+    } else {
+      formulaBox.innerHTML = `bezier = <span id="bezier-formula-name">${activeBezier.name}</span>, <span id="bezier-formula-coords">${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(2)}, ${y2.toFixed(2)}</span>`;
+    }
+  } else {
+    const fn = document.getElementById('bezier-formula-name');
+    const fc = document.getElementById('bezier-formula-coords');
+    if (fn) fn.innerText = activeBezier.name;
+    if (fc) fc.innerText = `${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(2)}, ${y2.toFixed(2)}`;
+  }
 }
 
 function getCanvasPoint(clientX, clientY) {
@@ -372,29 +386,77 @@ canvas.addEventListener('pointerup', stopDragging);
 canvas.addEventListener('pointercancel', stopDragging);
 
 
+function updateFormatUI() {
+  const btnLua = document.getElementById('btn-format-lua');
+  const btnConf = document.getElementById('btn-format-conf');
+  const formatBadge = document.getElementById('format-status-badge');
+  const syncHint = document.getElementById('format-sync-hint');
+  const pathLabel = document.getElementById('config-path-label');
+
+  const isLua = state.format === 'lua';
+  if (btnLua) btnLua.classList.toggle('active', isLua);
+  if (btnConf) btnConf.classList.toggle('active', !isLua);
+  if (formatBadge) {
+    formatBadge.textContent = isLua ? 'Lua Active' : 'Conf Active';
+    formatBadge.className = isLua ? 'format-status-badge lua' : 'format-status-badge conf';
+  }
+
+  const targetPath = isLua
+    ? (state.paths?.luaConfig || '~/.config/hypr/animations-active.lua')
+    : (state.paths?.confConfig || '~/.config/hypr/animations.conf');
+
+  if (syncHint) {
+    syncHint.textContent = isLua
+      ? `Target: ${targetPath} (Omarchy / Lua)`
+      : `Target: ${targetPath} (Hyprland .conf)`;
+  }
+
+  if (pathLabel) {
+    const integration = state.paths?.mainConfig ? ` · integration: ${state.paths.mainConfig}` : '';
+    pathLabel.textContent = `Managed file: ${targetPath}${integration}`;
+  }
+}
+
+function setFormat(newFormat) {
+  if (state.format === newFormat) return;
+  state.format = newFormat;
+  updateFormatUI();
+  drawBezierDesigner();
+  updateConfigTextarea();
+  const formatName = newFormat === 'lua' ? 'Lua (animations-active.lua)' : 'Hyprland (animations.conf)';
+  showToast(`Switched target format to ${formatName}`);
+}
+
 // Load active config from server APIs
-async function fetchConfig() {
+async function fetchConfig(requestedFormat) {
   try {
-    const response = await fetch('/api/config');
+    const query = requestedFormat ? `?format=${encodeURIComponent(requestedFormat)}` : '';
+    const response = await fetch(`/api/config${query}`);
     const data = await response.json();
     if (data.success) {
+      state.format = data.format || 'lua';
       state.enabled = data.config.enabled;
       state.beziers = data.config.beziers;
       state.animations = data.config.animations;
       state.layerRules = data.config.layerRules || [];
-      
+      state.paths = data.paths || {};
+
       // Ensure we have some default beziers if none found
       if (state.beziers.length === 0) {
         state.beziers = [...PRESETS[0].beziers];
       }
-      
+      if (state.animations.length === 0) {
+        state.animations = JSON.parse(JSON.stringify(PRESETS[0].animations));
+      }
+
       // Select the first bezier initially
       state.selectedBezierIndex = 0;
-      
+
       // Update checkmark in HTML toggle
       document.getElementById('animations-enabled-checkbox').checked = state.enabled;
 
       // Populate interface
+      updateFormatUI();
       renderPresets();
       renderBeziers();
       renderRulesTable();
@@ -402,8 +464,10 @@ async function fetchConfig() {
       drawBezierDesigner();
       updateConfigTextarea();
       updateSimulationTransitions();
-      
-      showToast('Loaded configuration successfully.');
+
+      await updateConnectionStatus();
+      const formatLabel = state.format === 'lua' ? 'Lua (animations-active.lua)' : 'Conf (animations.conf)';
+      showToast(data.usingManagedConfig ? `Loaded managed ${formatLabel} configuration.` : `Loaded active Hyprland ${formatLabel} configuration.`);
     } else {
       showToast('Error loading configuration: ' + data.error, true);
     }
@@ -411,9 +475,23 @@ async function fetchConfig() {
     showToast('Failed to connect to backend configuration daemon.', true);
     document.getElementById('connection-status').className = 'status-badge disconnected';
     document.getElementById('connection-status').innerText = 'Offline';
-    
+
     // Fall back to Omarchy defaults so the app remains interactive!
     loadPreset(PRESETS[0]);
+  }
+}
+
+async function updateConnectionStatus() {
+  const badge = document.getElementById('connection-status');
+  try {
+    const response = await fetch('/api/status');
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error);
+    badge.className = 'status-badge connected';
+    badge.textContent = 'Hyprland connected';
+  } catch {
+    badge.className = 'status-badge disconnected';
+    badge.textContent = 'Hyprland unavailable';
   }
 }
 
@@ -702,42 +780,78 @@ document.getElementById('animations-enabled-checkbox').addEventListener('change'
   updateSimulationTransitions();
 });
 
-// Update the code blocks textarea showing raw Hyprland config
-function updateConfigTextarea() {
-  const codeBox = document.getElementById('config-code-text');
-  
-  let codeStr = `# Auto-generated by Hyprland Animation Configurator GUI\n`;
-  codeStr += `animations {\n`;
-  codeStr += `    enabled = ${state.enabled ? 'yes' : 'no'}\n\n`;
-  
-  codeStr += `    # Bezier Curves\n`;
-  state.beziers.forEach(b => {
-    codeStr += `    bezier = ${b.name}, ${b.value.join(', ')}\n`;
-  });
-  
-  codeStr += `\n    # Animation Rules\n`;
-  state.animations.forEach(r => {
-    const stylePart = r.style ? `, ${r.style}` : '';
-    codeStr += `    animation = ${r.name}, ${r.enabled ? '1' : '0'}, ${r.speed.toFixed(2)}, ${r.curve}${stylePart}\n`;
-  });
-  
-  codeStr += `}\n`;
+function generateLuaCode(st) {
+  let code = `-- Managed by Hyprland Animation Studio. Remove require("hypr.animations-active") to stop managing this file.\n`;
+  code += `hl.config({\n  animations = {\n    enabled = ${st.enabled ? 'true' : 'false'},\n  },\n})\n\n`;
 
-  if (state.layerRules && state.layerRules.length > 0) {
-    codeStr += `\n# Layer Surface Animations\n`;
-    state.layerRules.forEach(l => {
-      if (l.enabled) {
-        codeStr += `layerrule = no_anim off, match:namespace ${l.namespace}\n`;
-        if (l.style) {
-          codeStr += `layerrule = animation ${l.style}, match:namespace ${l.namespace}\n`;
-        }
+  if (st.beziers.length > 0) {
+    code += `-- Bezier Curves\n`;
+    st.beziers.forEach(b => {
+      code += `hl.curve("${b.name}", { type = "bezier", points = { { ${b.value[0]}, ${b.value[1]} }, { ${b.value[2]}, ${b.value[3]} } } })\n`;
+    });
+    code += `\n`;
+  }
+
+  code += `-- Animation triggers\n`;
+  st.animations.forEach(r => {
+    const parts = [`leaf = "${r.name}"`, `enabled = ${r.enabled ? 'true' : 'false'}`, `speed = ${r.speed.toFixed(2)}`, `bezier = "${r.curve}"`];
+    if (r.style) parts.push(`style = "${r.style}"`);
+    code += `hl.animation({ ${parts.join(', ')} })\n`;
+  });
+
+  if (st.layerRules && st.layerRules.length > 0) {
+    code += `\n-- Layer-surface rules\n`;
+    st.layerRules.forEach(l => {
+      if (l.enabled && l.style) {
+        code += `hl.layer_rule({ match = { namespace = "${l.namespace}" }, animation = "${l.style}" })\n`;
       } else {
-        codeStr += `layerrule = no_anim on, match:namespace ${l.namespace}\n`;
+        code += `hl.layer_rule({ match = { namespace = "${l.namespace}" }, no_anim = true, animation = "none" })\n`;
       }
     });
   }
-  
-  codeBox.textContent = codeStr;
+
+  return code;
+}
+
+function generateConfCode(st) {
+  let code = `# Managed by Hyprland Animation Studio. Remove its source line to stop managing this file.\n`;
+  code += `animations {\n    enabled = ${st.enabled ? 'yes' : 'no'}\n\n`;
+
+  if (st.beziers.length > 0) {
+    code += `    # Bezier Curves\n`;
+    st.beziers.forEach(b => {
+      code += `    bezier = ${b.name}, ${b.value.join(', ')}\n`;
+    });
+    code += `\n`;
+  }
+
+  code += `    # Animation triggers\n`;
+  st.animations.forEach(r => {
+    const stylePart = r.style ? `, ${r.style}` : '';
+    code += `    animation = ${r.name}, ${r.enabled ? '1' : '0'}, ${r.speed.toFixed(2)}, ${r.curve}${stylePart}\n`;
+  });
+
+  code += `}\n`;
+
+  if (st.layerRules && st.layerRules.length > 0) {
+    code += `\n# Layer Surface Animations\n`;
+    st.layerRules.forEach(l => {
+      if (l.enabled && l.style) {
+        code += `layerrule = animation ${l.style}, match:namespace ${l.namespace}\n`;
+      } else {
+        code += `layerrule = no_anim, match:namespace ${l.namespace}\n`;
+      }
+    });
+  }
+
+  return code;
+}
+
+// Update the code blocks textarea showing raw Hyprland config
+function updateConfigTextarea() {
+  const codeBox = document.getElementById('config-code-text');
+  if (!codeBox) return;
+  codeBox.textContent = state.format === 'lua' ? generateLuaCode(state) : generateConfCode(state);
 }
 
 
@@ -850,25 +964,36 @@ document.getElementById('btn-apply-config').addEventListener('click', async () =
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(state)
+      body: JSON.stringify({ ...state, format: state.format })
     });
     
     const result = await response.json();
     if (result.success) {
+      if (result.paths) state.paths = result.paths;
+      updateFormatUI();
       if (result.errors) {
         showToast(`Applied with warnings:\n${result.errors}`, true);
       } else {
-        showToast('Successfully applied animations to Hyprland!');
+        const formatName = state.format === 'lua' ? 'Lua (animations-active.lua)' : 'Conf (animations.conf)';
+        showToast(`Successfully applied ${formatName} animations to Hyprland!`);
       }
     } else {
-      showToast('Error applying config: ' + result.error, true);
+      showToast('Error applying config: ' + (result.reloadError || result.error), true);
     }
+    await updateConnectionStatus();
   } catch (err) {
     showToast('Failed to transmit configuration details to the local server daemon.', true);
   } finally {
     btn.disabled = false;
     btn.innerText = 'Save & Apply Config';
   }
+});
+
+// Format toggle and reload listeners
+document.getElementById('btn-format-lua')?.addEventListener('click', () => setFormat('lua'));
+document.getElementById('btn-format-conf')?.addEventListener('click', () => setFormat('conf'));
+document.getElementById('btn-reload-format')?.addEventListener('click', () => {
+  fetchConfig(state.format);
 });
 
 // Revert to default configs

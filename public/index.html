@@ -21,6 +21,7 @@
                 </div>
             </div>
             <div class="status-actions">
+                <span id="format-status-badge" class="format-status-badge">Lua Active</span>
                 <span id="connection-status" class="status-badge connected" aria-live="polite">Connected to Daemon</span>
                 <button id="btn-revert" class="btn btn-secondary">Reset to Defaults</button>
             </div>
@@ -209,9 +210,22 @@
 
                         <!-- Config output code blocks -->
                         <div class="glass-card config-output-card">
-                            <div class="card-header">
-                                <h3>Generated Configuration</h3>
-                                <span class="subtitle">This will be written to ~/.config/hypr/animations.conf</span>
+                            <div class="card-header-with-actions">
+                                <div>
+                                    <h3>Generated Configuration</h3>
+                                    <span class="subtitle" id="config-path-label">Preparing Hyprland configuration path…</span>
+                                </div>
+                                <div class="format-selector-wrapper">
+                                    <span class="format-label">Target Format:</span>
+                                    <div class="format-toggle" role="radiogroup" aria-label="Configuration format">
+                                        <button type="button" class="btn-format active" id="btn-format-lua" data-format="lua">Lua (.lua)</button>
+                                        <button type="button" class="btn-format" id="btn-format-conf" data-format="conf">Hyprland (.conf)</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="format-sync-bar">
+                                <span class="format-sync-hint" id="format-sync-hint">Target: ~/.config/hypr/animations-active.lua (Lua)</span>
+                                <button type="button" class="btn-text-action" id="btn-reload-format" title="Reload settings from this file on disk">↻ Load saved</button>
                             </div>
                             <pre class="config-code-block"><code id="config-code-text"># Config preview...</code></pre>
                             <div class="apply-actions">
@@ -230,6 +244,6 @@
         <span id="toast-message">Message here</span>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
